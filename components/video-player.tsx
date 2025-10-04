@@ -1,3 +1,4 @@
+// PrimeVicio - Site - Copia/components/video-player.tsx
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
@@ -10,6 +11,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/auth/auth-context"
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore"
+import { userFirestore } from "@/lib/firebase"
 
 type VideoPlayerProps = {
   src: string
@@ -17,9 +21,15 @@ type VideoPlayerProps = {
   downloadUrl?: string
   onClose?: () => void
   rememberPositionKey?: string
-  rememberPosition?: boolean
   hasNextEpisode?: boolean
   onNextEpisode?: () => void
+  mediaInfo?: { // Adicionando informações de mídia para salvar no histórico
+    mediaId: string;
+    mediaType: 'movie' | 'tv';
+    poster_path: string | null;
+    season?: number;
+    episode?: number;
+  }
 }
 
 export default function VideoPlayer({
@@ -28,10 +38,12 @@ export default function VideoPlayer({
   downloadUrl,
   onClose,
   rememberPositionKey,
-  rememberPosition = true,
   hasNextEpisode,
   onNextEpisode,
+  mediaInfo,
 }: VideoPlayerProps) {
+  const { user } = useAuth(); // Pega o usuário logado
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const progressWrapRef = useRef<HTMLDivElement>(null)
@@ -65,7 +77,6 @@ export default function VideoPlayer({
 
   const volumeKey = "video-player-volume"
   const autoplayKey = "video-player-autoplay-enabled"
-  const positionKey = `video-pos:${rememberPositionKey || src}`
   
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastTapRef = useRef<{ time: number, side: 'left' | 'right' | 'center' }>({ time: 0, side: 'center' });
@@ -77,7 +88,6 @@ export default function VideoPlayer({
 
   useEffect(() => {
     const videoElement = videoRef.current;
-    // Reseta o gatilho de finalização sempre que a fonte do vídeo muda
     setEndingTriggered(false);
     return () => {
       if (videoElement) {
@@ -87,8 +97,34 @@ export default function VideoPlayer({
       }
     };
   }, [src]);
-
+  
+  // Carrega posição salva
   useEffect(() => {
+    const loadPosition = async () => {
+        if (!rememberPositionKey || !videoRef.current) return;
+
+        let savedTime = 0;
+
+        if (user) { // Se o usuário está logado, busca no Firestore
+            const historyDocRef = doc(userFirestore, 'users', user.uid, 'watchHistory', rememberPositionKey);
+            const docSnap = await getDoc(historyDocRef);
+            if (docSnap.exists()) {
+                savedTime = docSnap.data().currentTime || 0;
+            }
+        } else { // Senão, busca no Local Storage
+            const savedPos = localStorage.getItem(rememberPositionKey);
+            if (savedPos) {
+                savedTime = Number.parseFloat(savedPos);
+            }
+        }
+
+        if (videoRef.current && !isNaN(savedTime) && savedTime > 5) {
+            videoRef.current.currentTime = savedTime;
+            setCurrentTime(savedTime);
+            setShowContinueWatching(true);
+        }
+    };
+
     try {
       const savedVolume = localStorage.getItem(volumeKey)
       if (savedVolume) {
@@ -98,39 +134,46 @@ export default function VideoPlayer({
       }
       
       const savedAutoplay = localStorage.getItem(autoplayKey);
-      if (savedAutoplay !== null) {
-        setIsAutoplayEnabled(JSON.parse(savedAutoplay));
-      }
+      if (savedAutoplay !== null) setIsAutoplayEnabled(JSON.parse(savedAutoplay));
+      
+      loadPosition();
 
-      if (rememberPosition) {
-        const savedPos = localStorage.getItem(positionKey)
-        if (savedPos && videoRef.current) {
-          const n = Number.parseFloat(savedPos)
-          if (!Number.isNaN(n) && n > 5) {
-            videoRef.current.currentTime = n
-            setCurrentTime(n)
-            setShowContinueWatching(true)
-          }
-        }
-      }
-    } catch (e) {
-      // no-op
-    }
-  }, [positionKey, rememberPosition])
+    } catch (e) { /* no-op */ }
+  }, [rememberPositionKey, user]);
 
+  // Salva a posição
   useEffect(() => {
-    if (!rememberPosition) return
-    const id = setInterval(() => {
-      try {
-        if (videoRef.current) {
-          localStorage.setItem(positionKey, String(videoRef.current.currentTime || 0))
+    const intervalId = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.paused || !rememberPositionKey) return;
+        
+        const currentProgress = {
+            currentTime: videoRef.current.currentTime,
+            duration: videoRef.current.duration,
+            progress: (videoRef.current.currentTime / videoRef.current.duration) * 100
+        };
+
+        if (user && mediaInfo) { // Se logado, salva no Firestore
+            const historyDocRef = doc(userFirestore, 'users', user.uid, 'watchHistory', rememberPositionKey);
+            try {
+                await setDoc(historyDocRef, {
+                    ...mediaInfo,
+                    title,
+                    ...currentProgress,
+                    lastWatched: serverTimestamp()
+                }, { merge: true });
+            } catch (error) {
+                console.error("Erro ao salvar histórico no Firestore:", error);
+            }
+        } else { // Senão, salva no Local Storage
+            try {
+                localStorage.setItem(rememberPositionKey, String(currentProgress.currentTime));
+            } catch (e) { /* no-op */ }
         }
-      } catch (e) {
-        // no-op
-      }
-    }, 1500)
-    return () => clearInterval(id)
-  }, [positionKey, rememberPosition])
+    }, 5000); // Salva a cada 5 segundos
+
+    return () => clearInterval(intervalId);
+  }, [rememberPositionKey, user, mediaInfo, title]);
+
 
   useEffect(() => {
     setPipSupported(typeof document !== "undefined" && "pictureInPictureEnabled" in document)
@@ -204,7 +247,6 @@ export default function VideoPlayer({
     const { currentTime, duration } = videoRef.current;
     setCurrentTime(currentTime);
 
-    // Verificação robusta para o final do vídeo
     if (duration > 0 && duration - currentTime < 1.5) {
       triggerNextEpisodeOverlay();
     }

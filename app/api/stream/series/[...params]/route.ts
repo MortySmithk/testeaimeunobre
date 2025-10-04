@@ -1,6 +1,6 @@
 // app/api/stream/series/[...params]/route.ts
 import { NextResponse } from "next/server";
-import { firestore } from "@/lib/firebase";
+import { dataFirestore } from "@/lib/firebase"; // <-- MUDANÇA AQUI
 import { doc, getDoc, DocumentSnapshot } from "firebase/firestore";
 
 const ROXANO_API_URL = "https://roxanoplay.bb-bet.top/pages/proxys.php";
@@ -16,10 +16,7 @@ async function getFirestoreStream(docSnap: DocumentSnapshot, season: string, epi
                 const episodeData = seasonData.episodes.find((ep: any) => ep.episode_number === episodeNum);
                 if (episodeData && Array.isArray(episodeData.urls) && episodeData.urls.length > 0 && episodeData.urls[0].url) {
                     const firestoreUrl = episodeData.urls[0].url;
-
-                    // --- MODIFICAÇÃO IMPORTANTE AQUI ---
                     const safeUrl = encodeURIComponent(decodeURIComponent(firestoreUrl));
-
                     const firestoreStream = {
                         playerType: "custom",
                         url: `/api/video-proxy?videoUrl=${safeUrl}`,
@@ -62,7 +59,7 @@ export async function GET(
       console.warn("API de Séries: Não foi possível buscar informações do TMDB para a série:", tmdbId, tmdbError);
     }
     
-    const docRef = doc(firestore, "media", tmdbId);
+    const docRef = doc(dataFirestore, "media", tmdbId); // <-- MUDANÇA AQUI
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists() && docSnap.data()?.forceFirestore === true) {

@@ -1,14 +1,16 @@
+// PrimeVicio - Site - Copia/app/layout.tsx
 import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import "./globals.css"
 import { FavoritesProvider } from "@/components/favorites-context"
 import { LayoutWrapper } from "@/components/layout-wrapper"
+import { AuthProvider } from "@/components/auth/auth-context" // Importamos o provedor
 
 export const metadata: Metadata = {
-  title: "PrimeVicio - API,EMBED DE FILMES E SÉRIES GRÁTIS",
-  description: "API DE EMBED COM FILMES E SÉRIES com players rápidos e conteúdo atualizado e Totalmente Gratuito.",
-  icons: "https://i.ibb.co/xqMzw3J1/primevicioicon.png", // Ícone da aba do navegador adicionado aqui
+  title: "PrimeVicio - Assista a Filmes e Séries Grátis",
+  description: "Sua plataforma para assistir aos melhores filmes e séries online, totalmente gratuito e com qualidade.",
+  icons: "https://i.ibb.co/xqg1wMh2/Chat-GPT-Image-14-de-ago-de-2025-23-47-40.png",
 }
 
 export default function RootLayout({
@@ -52,11 +54,13 @@ export default function RootLayout({
         `}</style>
       </head>
       <body className="bg-zinc-950">
-        <FavoritesProvider>
-          <LayoutWrapper>
-            {children}
-          </LayoutWrapper>
-        </FavoritesProvider>
+        <AuthProvider> {/* O AuthProvider envolve os outros componentes */}
+          <FavoritesProvider>
+            <LayoutWrapper>
+              {children}
+            </LayoutWrapper>
+          </FavoritesProvider>
+        </AuthProvider>
       </body>
     </html>
   )

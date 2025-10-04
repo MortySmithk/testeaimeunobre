@@ -1,4 +1,4 @@
-// app/search/page.tsx
+// PrimeVicio - Site - Copia/app/search/page.tsx
 "use client"
 
 import { useSearchParams } from 'next/navigation'

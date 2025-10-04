@@ -1,23 +1,18 @@
 // app/api/stream/movies/[tmdbId]/route.ts
 import { NextResponse } from "next/server";
-import { firestore } from "@/lib/firebase";
+import { dataFirestore } from "@/lib/firebase"; // <-- MUDANÇA AQUI
 import { doc, getDoc, DocumentSnapshot } from "firebase/firestore";
 
 const ROXANO_API_URL = "https://roxanoplay.bb-bet.top/pages/hostmov.php";
 const TMDB_API_KEY = "860b66ade580bacae581f4228fad49fc";
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
-// Helper para obter o stream do Firestore. Retorna um objeto de resposta ou null.
 async function getFirestoreStream(docSnap: DocumentSnapshot, mediaInfo: any) {
     if (docSnap.exists()) {
         const docData = docSnap.data();
         if (docData && Array.isArray(docData.urls) && docData.urls.length > 0 && docData.urls[0].url) {
             const firestoreUrl = docData.urls[0].url;
-            
-            // --- MODIFICAÇÃO IMPORTANTE AQUI ---
-            // Decodificamos a URL primeiro para evitar dupla codificação, depois codificamos novamente de forma segura.
             const safeUrl = encodeURIComponent(decodeURIComponent(firestoreUrl));
-
             const firestoreStream = {
                 playerType: "custom",
                 url: `/api/video-proxy?videoUrl=${safeUrl}`,
@@ -32,7 +27,6 @@ async function getFirestoreStream(docSnap: DocumentSnapshot, mediaInfo: any) {
     return null;
 }
 
-// Helper para criar uma promessa que rejeita após um timeout
 const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms));
 
 
@@ -62,10 +56,10 @@ export async function GET(
       console.warn("API de Filmes: Não foi possível buscar informações do TMDB para o filme:", tmdbId, tmdbError);
     }
 
-    const docRef = doc(firestore, "media", tmdbId);
+    const docRef = doc(dataFirestore, "media", tmdbId); // <-- MUDANÇA AQUI
     const docSnap = await getDoc(docRef);
     const docData = docSnap.exists() ? docSnap.data() : null;
-    
+
     if (docData?.forceFirestore === true) {
         console.log(`[Filme ${tmdbId}] Forçando o uso do Firestore.`);
         const firestoreResponse = await getFirestoreStream(docSnap, mediaInfo);
